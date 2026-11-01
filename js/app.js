@@ -518,6 +518,8 @@ function canShareFiles() {
 
 const SHARE_MODE = IS_TOUCH && canShareFiles();
 
+if (IS_TOUCH) document.documentElement.classList.add("is-touch");
+
 function setActionStatus(text, kind) {
   els.actionStatus.textContent = text;
   els.actionStatus.className = `action-status ${kind || ""}`;
