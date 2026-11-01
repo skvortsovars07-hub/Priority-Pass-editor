@@ -200,7 +200,7 @@ function renderCard() {
   els.cardUntil.textContent = formatCardDate(state.validUntil);
 
   if (state.qrDataUrl) {
-    els.cardQr.innerHTML = `<img alt="QR" src="${state.qrDataUrl}">`;
+    els.cardQr.innerHTML = `<img alt="QR" data-capture="manual" src="${state.qrDataUrl}">`;
   } else {
     els.cardQr.innerHTML = `<div class="card-qr-placeholder">QR</div>`;
   }
@@ -538,9 +538,35 @@ function scheduleExport() {
   exportTimer = setTimeout(() => ensureExport().catch(() => {}), 450);
 }
 
+// QR в снимок не берём: Safari рисует карту через SVG и нередко теряет свежую картинку.
+// Поэтому html-to-image его пропускает, а мы кладём QR на холст сами.
+async function drawQrOnCanvas(ctx, qrSrc) {
+  const img = await loadImage(qrSrc);
+  const card = els.card.getBoundingClientRect();
+  const box = els.cardQr.getBoundingClientRect();
+  const k = (card.width ? els.card.offsetWidth / card.width : 1) * PIXEL_RATIO;
+  const bx = (box.left - card.left) * k;
+  const by = (box.top - card.top) * k;
+  const bw = box.width * k;
+  const bh = box.height * k;
+  const fit = Math.min(bw / img.width, bh / img.height);
+  const w = img.width * fit;
+  const h = img.height * fit;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, bx + (bw - w) / 2, by + (bh - h) / 2, w, h);
+}
+
 async function buildExport(version) {
   await document.fonts.ready;
-  const opts = { pixelRatio: PIXEL_RATIO, backgroundColor: "#ffffff", cacheBust: true };
+  const qrSrc = state.qrDataUrl;
+  const opts = {
+    pixelRatio: PIXEL_RATIO,
+    backgroundColor: "#ffffff",
+    cacheBust: true,
+    filter: (node) => !(node.dataset && node.dataset.capture === "manual"),
+  };
   if (!exportWarm) {
     // Safari в первый раз часто рисует карту без картинок, поэтому делаем один пробный проход.
     exportWarm = true;
@@ -554,6 +580,7 @@ async function buildExport(version) {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(shot, 0, 0);
+  if (qrSrc) await drawQrOnCanvas(ctx, qrSrc);
 
   const png = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   const pdf = jpegToPdfBlob(canvas.toDataURL("image/jpeg", 0.95), canvas.width, canvas.height);

@@ -1,4 +1,4 @@
-const CACHE = "pp-editor-v1";
+const CACHE = "pp-editor-v2";
 const ASSETS = [
   "./",
   "index.html",
@@ -26,20 +26,19 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Свои файлы: отдаём из кеша сразу и обновляем его в фоне, чтобы работало без сети.
+// Сначала сеть, чтобы правки сайта доходили сразу; кеш нужен только когда сети нет.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   event.respondWith(
-    caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true });
-      const fresh = fetch(req)
-        .then((res) => {
-          if (res.ok) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fresh;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }))
   );
 });
